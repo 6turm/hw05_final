@@ -106,27 +106,6 @@ class PostTests(TestCase):
         response = self.client.get('/not_page/')
         self.assertEqual(response.status_code, 404)
 
-    def test_img_in_post(self):
-        small_gif = (
-            b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04'
-            b'\x01\x0a\x00\x01\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02'
-            b'\x02\x4c\x01\x00\x3b'
-        )
-        img = SimpleUploadedFile(
-            name='img.gif',
-            content=small_gif,
-            content_type='image/gif',
-        )
-        post = Post.objects.create(
-            text='text with image', author=self.user, image=img
-            )
-        post_url = reverse(
-            'post',
-            kwargs={'username': self.user.username, 'post_id': post.id}
-            )
-        response = self.client.get(post_url)
-        self.assertContains(response, '<img ')
-
     def test_img_in_other_pages(self):
         small_gif = (
             b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04'
@@ -253,10 +232,6 @@ class PostTests(TestCase):
                 'add_comment',
                 kwargs={'username': post.author.username, 'post_id': post.pk}
                 )
-
-        # self.client_anon.post(url_comment, {'text': text_comm}, follow=True)
-        # response = self.client.get(url_post)
-        # self.assertNotContains(response, text_comm)
 
         self.client.post(url_comment, {'text': text_comm}, follow=True)
         response = self.client.get(url_post)
