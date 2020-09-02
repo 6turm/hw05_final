@@ -24,4 +24,5 @@ class CommentForm(ModelForm):
         model = Comment
         fields = ('text',)
         widgets = {'text': Textarea()}
+        labels = {'text': 'Текст комментария'}
         help_texts = {'text': 'Будьте вежливы'}

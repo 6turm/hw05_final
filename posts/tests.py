@@ -138,14 +138,18 @@ class PostTests(TestCase):
             content=small_gif,
             content_type='image/gif',
         )
-        Post.objects.create(
+        post = Post.objects.create(
             text='text with image', author=self.user,
             image=img, group=self.group
         )
         urls = [
             reverse('index'),
             reverse('group', kwargs={'slug': self.group.slug}),
-            reverse('profile', kwargs={'username': self.user.username})
+            reverse('profile', kwargs={'username': self.user.username}),
+            reverse(
+                'post',
+                kwargs={'username': self.user.username, 'post_id': post.id}
+            ),
         ]
         for url in urls:
             response = self.client.get(url)
@@ -176,28 +180,34 @@ class PostTests(TestCase):
         response2 = self.client.get(reverse('index'))
         self.assertContains(response2, 'check text')
 
-    def test_follow_unollow(self):
+    def test_follow(self):
         author = User.objects.create_user(username='foll_author')
         author_url = reverse('profile', kwargs={'username': author.username})
         follow_url = reverse(
             'profile_follow', kwargs={'username': author.username}
         )
-        unfollow_url = reverse(
-            'profile_unfollow', kwargs={'username': author.username}
-        )
 
-        response_nonfoll = self.client.get(author_url)
-        self.assertContains(response_nonfoll, follow_url)
-        self.assertNotContains(response_nonfoll, unfollow_url)
+        response = self.client.get(author_url)
+        self.assertContains(response, follow_url)
+
         self.client.get(follow_url)
         following = Follow.objects.filter(
             user__username=self.user, author__username=author
             ).exists()
         self.assertTrue(following)
 
-        response_followed = self.client.get(author_url)
-        self.assertContains(response_followed, unfollow_url)
-        self.assertNotContains(response_followed, follow_url)
+    def test_unfollow(self):
+        author = User.objects.create_user(username='foll_author')
+        Follow.objects.create(user=self.user, author=author)
+
+        author_url = reverse('profile', kwargs={'username': author.username})
+        unfollow_url = reverse(
+            'profile_unfollow', kwargs={'username': author.username}
+        )
+
+        response = self.client.get(author_url)
+        self.assertContains(response, unfollow_url)
+
         self.client.get(unfollow_url)
         following = Follow.objects.filter(
             user__username=self.user, author__username=author
@@ -216,12 +226,19 @@ class PostTests(TestCase):
             )
         url = reverse('follow_index')
 
-        response_nonfoll = self.client.get(url)
-        self.assertEqual(len(response_nonfoll.context['page']), 0)
         self.url_returns(url, client_follow, text, self.group, author)
 
+    def test_unfollow_feed(self):
+        author = User.objects.create_user(username="author")
+        text = 'some_text'
+        Post.objects.create(
+            text=text, author=author, group=self.group
+            )
+        url = reverse('follow_index')
+        response = self.client.get(url)
+        self.assertEqual(len(response.context['page']), 0)
+
     def test_auth_comment(self):
-        cache.clear()
         text = 'some_post'
         text_comm = 'some_comment'
         post = Post.objects.create(
@@ -237,12 +254,31 @@ class PostTests(TestCase):
                 kwargs={'username': post.author.username, 'post_id': post.pk}
                 )
 
+        # self.client_anon.post(url_comment, {'text': text_comm}, follow=True)
+        # response = self.client.get(url_post)
+        # self.assertNotContains(response, text_comm)
+
+        self.client.post(url_comment, {'text': text_comm}, follow=True)
+        response = self.client.get(url_post)
+        comment = response.context['comments'][0]
+        self.assertEqual(comment.text, text_comm)
+        self.assertEqual(comment.author, self.user)
+
+    def test_anon_comment(self):
+        text = 'some_post'
+        text_comm = 'some_comment'
+        post = Post.objects.create(
+            text=text, author=self.user, group=self.group
+            )
+        url_post = reverse(
+            'post',
+            kwargs={'username': post.author.username, 'post_id': post.pk}
+        )
+        url_comment = reverse(
+                'add_comment',
+                kwargs={'username': post.author.username, 'post_id': post.pk}
+                )
+
         self.client_anon.post(url_comment, {'text': text_comm}, follow=True)
         response = self.client.get(url_post)
         self.assertNotContains(response, text_comm)
-
-        self.client.post(url_comment, {'text': text_comm}, follow=True)
-        response_auth = self.client.get(url_post)
-        comment = response_auth.context['comments'][0]
-        self.assertEqual(comment.text, text_comm)
-        self.assertEqual(comment.author, self.user)
