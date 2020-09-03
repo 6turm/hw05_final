@@ -2,7 +2,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.cache import cache
-from .models import Post, User, Group, Follow
+from .models import Post, User, Group, Follow, Comment
 
 
 class PostTests(TestCase):
@@ -166,10 +166,13 @@ class PostTests(TestCase):
             'profile_follow', kwargs={'username': author.username}
         )
 
-        response = self.client.get(author_url)
+        response = self.client.get(author_url, follow=True)
+        self.assertEqual(response.status_code, 200)
         self.assertContains(response, follow_url)
 
-        self.client.get(follow_url)
+        self.client.get(follow_url, follow=True)
+        follow_count = Follow.objects.all().count()
+        self.assertEqual(follow_count, 1)
         following = Follow.objects.filter(
             user__username=self.user, author__username=author
             ).exists()
@@ -184,14 +187,13 @@ class PostTests(TestCase):
             'profile_unfollow', kwargs={'username': author.username}
         )
 
-        response = self.client.get(author_url)
+        response = self.client.get(author_url, follow=True)
+        self.assertEqual(response.status_code, 200)
         self.assertContains(response, unfollow_url)
 
         self.client.get(unfollow_url)
-        following = Follow.objects.filter(
-            user__username=self.user, author__username=author
-            ).exists()
-        self.assertFalse(following)
+        follow_count = Follow.objects.all().count()
+        self.assertEqual(follow_count, 0)
 
     def test_follow_feed(self):
         author = User.objects.create_user(username="author")
@@ -236,7 +238,10 @@ class PostTests(TestCase):
         self.client.post(url_comment, {'text': text_comm}, follow=True)
         response = self.client.get(url_post)
         comment = response.context['comments'][0]
+        comment_count = Comment.objects.all().count()
+        self.assertEqual(comment_count, 1)
         self.assertEqual(comment.text, text_comm)
+        self.assertEqual(comment.post, post)
         self.assertEqual(comment.author, self.user)
 
     def test_anon_comment(self):
@@ -245,15 +250,11 @@ class PostTests(TestCase):
         post = Post.objects.create(
             text=text, author=self.user, group=self.group
             )
-        url_post = reverse(
-            'post',
-            kwargs={'username': post.author.username, 'post_id': post.pk}
-        )
         url_comment = reverse(
                 'add_comment',
                 kwargs={'username': post.author.username, 'post_id': post.pk}
                 )
 
         self.client_anon.post(url_comment, {'text': text_comm}, follow=True)
-        response = self.client.get(url_post)
-        self.assertNotContains(response, text_comm)
+        comment_count = Comment.objects.all().count()
+        self.assertEqual(comment_count, 0)

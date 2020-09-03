@@ -59,7 +59,6 @@ def profile(request, username):
     following = Follow.objects.filter(
         user__username=user, author__username=author
         ).exists()
-    # count_followers = Follow.objects.filter(author__useame=author).count
     count_followers = author.following.count()
     count_following = author.follower.count()
 
